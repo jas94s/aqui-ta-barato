@@ -15,7 +15,7 @@ def conectar_planilha():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name("credenciais.json", scope)
     client = gspread.authorize(creds)
-    sheet = client.open("aqui-ta-barato").sheet1
+    sheet = sheet = client.open_by_key("1bY2JXhGjyr4-VV1jHVI77Fbc3OhtzwYc7CMe6TkkX1Q").sheet1
     return sheet
 
 def carregar_dados():
