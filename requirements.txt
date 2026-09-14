@@ -1,4 +1,6 @@
-streamlit
-pandas
+Flask
+twilio
 gspread
 oauth2client
+google-generativeai
+requests
