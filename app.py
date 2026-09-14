@@ -5,17 +5,16 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 st.set_page_config(page_title="Aqui tá barato - Jijoca", page_icon="🛒")
-st.title("🛒 Aqui tá barato")
+st.title("🛒 Aqui tá barato - Jijoca")
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
-# Você vai precisar criar as credenciais depois, por enquanto deixa assim pra testar local
+ID_PLANILHA = "1bY2JXhGjyr4-VV1jHVI77Fbc3OhtzwYc7CMe6TkkX1Q"
 
-@st.cache_resource
 def conectar_planilha():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credenciais.json", scope)
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key("1bY2JXhGjyr4-VV1jHVI77Fbc3OhtzwYc7CMe6TkkX1Q").sheet1
+    sheet = client.open_by_key(ID_PLANILHA).sheet1
     return sheet
 
 def carregar_dados():
@@ -23,14 +22,13 @@ def carregar_dados():
         sheet = conectar_planilha()
         dados = sheet.get_all_records()
         return pd.DataFrame(dados)
-    except:
+    except Exception as e:
         return pd.DataFrame(columns=["Produto", "Preço", "Mercado", "Data"])
 
 def salvar_dado(produto, preco, mercado, data):
     sheet = conectar_planilha()
-    sheet.append_row([produto, float(preco), mercado, data])
+    sheet.append_row([produto, float(preco), mercado, str(data)])
 
-# Carrega
 df = carregar_dados()
 hoje = date.today().strftime("%d/%m/%Y")
 
@@ -41,11 +39,11 @@ with tab1:
     if not df.empty:
         if busca:
             filtrados = df[df["Produto"].str.contains(busca, case=False, na=False)]
-            st.dataframe(filtrados.sort_values("Preço"))
+            st.dataframe(filtrados.sort_values("Preço"), use_container_width=True)
         else:
-            st.dataframe(df.sort_values("Preço"))
+            st.dataframe(df.sort_values("Preço"), use_container_width=True)
     else:
-        st.info("Nenhum produto ainda!")
+        st.info("Nenhum produto ainda. Seja o primeiro!")
 
 with tab2:
     with st.form("form_produto", clear_on_submit=True):
@@ -56,7 +54,7 @@ with tab2:
         if salvar:
             if nome and mercado and preco > 0:
                 salvar_dado(nome, preco, mercado, hoje)
-                st.success(f"{nome} salvo na base!")
-                st.cache_data.clear()
+                st.success(f"{nome} salvo!")
+                st.balloons()
             else:
                 st.error("Preencha tudo!")
