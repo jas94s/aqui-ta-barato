@@ -1,3 +1,5 @@
+import os
+import json
 import streamlit as st
 import pandas as pd
 from datetime import date
@@ -12,7 +14,14 @@ SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis
 
 @st.cache_resource
 def conectar_planilha():
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=SCOPE)
+    # Pega as credenciais do Render (Environment) ou do secrets.toml local
+    if "GOOGLE_CREDS_JSON" in os.environ:
+        info = json.loads(os.environ["GOOGLE_CREDS_JSON"])
+    else:
+        # Localmente ainda funciona com o secrets.toml
+        info = st.secrets["gcp_service_account"]
+    
+    creds = Credentials.from_service_account_info(info, scopes=SCOPE)
     client = gspread.authorize(creds)
     return client.open_by_key(ID_PLANILHA).sheet1
 
