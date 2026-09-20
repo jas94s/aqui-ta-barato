@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="Aqui tá barato - Jijoca", page_icon="🛒", layout="centered")
 st.title("🛒 Aqui tá barato - Jijoca")
 
-ID_PLANILHA = "1bY2JXhGjyr4-VV1jHVI77Fbc3OhtzwYc7CMe6TkkX1Q"
+ID_PLANILHA = "1uRmajGLm1p2bUz814BLG0nbXy5HoOyb8yhnpqb6p4XY"
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 @st.cache_resource
