@@ -6,7 +6,21 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import google.generativeai as genai
 from datetime import datetime
+from flask import Flask, request
+from twilio.twiml.messaging_response import MessagingResponse
 
+app = Flask(__name__)
+
+@app.route("/whatsapp", methods=['POST'])
+def whatsapp():
+    print("CHEGOU!")
+    resp = MessagingResponse()
+    resp.message("FUNCIONOU! Bot conectado!")
+    return str(resp)
+
+@app.route("/", methods=['GET'])
+def home():
+    return "ok"
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES (vem do Render) ---
