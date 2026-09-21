@@ -1,4 +1,5 @@
 import os, json, requests
+from requests.auth import HTTPBasicAuth
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 import gspread
@@ -23,9 +24,13 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SHEET_ID).sheet1
 
-def analisar_cupom_com_gemini(image_url):
+def baixar_imagem_twilio(url):
+    sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    token = os.environ.get("TWILIO_AUTH_TOKEN")
+    resp = requests.get(url, auth=HTTPBasicAuth(sid, token))
+    return resp.content
     # Baixa a imagem do Twilio
-    img_data = requests.get(image_url).content
+    img_data = baixar_imagem_twilio(image_url)
     
     prompt = """
     Você é um extrator de cupom fiscal brasileiro.
