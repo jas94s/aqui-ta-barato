@@ -6,27 +6,13 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import google.generativeai as genai
 from datetime import datetime
-from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
 
-app = Flask(__name__)
-
-@app.route("/whatsapp", methods=['POST'])
-def whatsapp():
-    print("CHEGOU!")
-    resp = MessagingResponse()
-    resp.message("FUNCIONOU! Bot conectado!")
-    return str(resp)
-
-@app.route("/", methods=['GET'])
-def home():
-    return "ok"
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES (vem do Render) ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GOOGLE_CREDS_JSON = os.environ.get("GOOGLE_CREDS_JSON") # Conteúdo inteiro do .json
-SHEET_ID = os.environ.get("SHEET_ID") # ID da sua planilha
+GOOGLE_CREDS_JSON = os.environ.get("GOOGLE_CREDS_JSON")
+SHEET_ID = os.environ.get("SHEET_ID")
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
@@ -43,7 +29,8 @@ def baixar_imagem_twilio(url):
     token = os.environ.get("TWILIO_AUTH_TOKEN")
     resp = requests.get(url, auth=HTTPBasicAuth(sid, token))
     return resp.content
-    # Baixa a imagem do Twilio
+
+def analisar_cupom_com_gemini(image_url):
     img_data = baixar_imagem_twilio(image_url)
     
     prompt = """
@@ -58,7 +45,6 @@ def baixar_imagem_twilio(url):
         prompt,
         {"mime_type": "image/jpeg", "data": img_data}
     ])
-    # Limpa a resposta pra virar JSON
     texto = response.text.replace("```json","").replace("```","").strip()
     return json.loads(texto)
 
@@ -68,7 +54,6 @@ def whatsapp():
     media_url = request.values.get("MediaUrl0")
     resp = MessagingResponse()
     
-    # --- CASO 1: USUÁRIO MANDOU FOTO ---
     if media_url:
         try:
             dados = analisar_cupom_com_gemini(media_url)
@@ -85,28 +70,32 @@ def whatsapp():
             resp.message(f"✅ Sucesso! Li {count} produtos do {mercado} e salvei na planilha!")
         except Exception as e:
             print(e)
-            resp.message(f"❌ Errei ao ler o cupom. Tenta mandar uma foto mais nítida? Erro: {str(e)[:100]}")
+            resp.message(f"❌ Errei ao ler o cupom. Tenta mandar uma foto mais nítida? Erro: {str(e)[:150]}")
         return str(resp)
 
-    # --- CASO 2: USUÁRIO MANDOU TEXTO ---
-    if "preço" in msg or "preco" in msg or "quanto" in msg:
-        # Lógica simples de busca na planilha
-        produto_busca = msg.replace("preço","").replace("quanto custa","").strip()
+    if "preco" in msg or "preço" in msg or "quanto" in msg:
+        produto_busca = msg.replace("preço","").replace("preco","").replace("quanto custa","").strip()
         try:
             registros = sheet.get_all_records()
-            encontrados = [r for r in registros if produto_busca in str(r['produto']).lower()]
+            encontrados = [r for r in registros if produto_busca in str(r.get('Produto','')).lower() or produto_busca in str(r.get('produto','')).lower()]
             if encontrados:
-                # Pega o mais barato
-                melhor = min(encontrados, key=lambda x: float(x['preco']))
-                resp.message(f"💰 Achei! {melhor['produto']} por R${melhor['preco']} no {melhor['mercado']}")
+                melhor = min(encontrados, key=lambda x: float(str(x.get('Preço', x.get('preco', 999))).replace(',','.')))
+                nome = melhor.get('Produto', melhor.get('produto'))
+                preco = melhor.get('Preço', melhor.get('preco'))
+                merc = melhor.get('Mercado', melhor.get('mercado'))
+                resp.message(f"💰 Achei! {nome} por R${preco} no {merc}")
             else:
-                resp.message(f"Não achei {produto_busca} na planilha ainda. Manda um cupom?")
-        except:
-            resp.message("Ainda estou aprendendo a buscar. Manda um cupom primeiro!")
+                resp.message(f"Não achei {produto_busca} ainda. Manda um cupom?")
+        except Exception as e:
+            resp.message(f"Ainda estou aprendendo a buscar. Erro: {e}")
     else:
         resp.message("Olá! 👋 Mande a FOTO do seu cupom fiscal que eu salvo tudo automático, ou pergunte ex: 'preço do arroz'")
 
     return str(resp)
+
+@app.route("/", methods=['GET'])
+def home():
+    return "Aqui ta barato bot online"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
