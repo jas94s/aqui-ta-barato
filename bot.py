@@ -64,7 +64,8 @@ def whatsapp():
         except Exception as e:
             print(e)
             resp.message(f"❌ Erro ao ler: {str(e)[:200]}")
-        return str(resp)
+            xml = str(resp)
+    return xml, 200, {'Content-Type': 'text/xml'}
     resp.message("Olá! 👋 Mande a FOTO do seu cupom fiscal!")
     return str(resp)
 
