@@ -6,19 +6,17 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from google import genai
 from google.genai import types
-from difflib import get_close_matches
 
 app = Flask(__name__)
 
-# --- CONFIGURAÇÕES ---
+# --- CONFIG ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_json = os.environ.get("GOOGLE_CREDS_JSON")
 creds_dict = json.loads(creds_json)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gc = gspread.authorize(creds)
-SHEET_ID = os.environ.get("SHEET_ID") # Coloca o ID da sua planilha no Render > Environment
+SHEET_ID = os.environ.get("SHEET_ID")
 sheet = gc.open_by_key(SHEET_ID).sheet1
-
 client_ai = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 def baixar_imagem_twilio(media_url):
@@ -27,6 +25,13 @@ def baixar_imagem_twilio(media_url):
     resp = requests.get(media_url, auth=(account_sid, auth_token))
     return resp.content
 
+def pega_valor_real(valor_str):
+    try:
+        v = str(valor_str).replace('R$','').replace(' ','').replace(',','.').strip()
+        return float(v)
+    except:
+        return 9999.0
+
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp():
     body = request.values.get("Body", "").strip()
@@ -34,32 +39,37 @@ def whatsapp():
     resp = MessagingResponse()
 
     try:
-        # CASO 1: LISTA DE COMPRAS (texto)
-        if not media_urls and body and len(body) > 2:
+        # CASO 1: LISTA DE COMPRAS
+        if not media_urls and body:
             registros = sheet.get_all_records()
+            print(f"Total registros: {len(registros)}")
+            
             itens_busca = [x.strip().lower() for x in body.replace("\n", ",").split(",") if x.strip()]
 
             if not registros:
-                resp.message("Sua planilha ainda está vazia. Mande fotos de cupons primeiro!")
+                resp.message("Planilha vazia. Mande fotos primeiro!")
             else:
                 resposta = "🛒 *Onde comprar mais barato:*\n\n"
                 for item_busca in itens_busca:
-                    produtos_planilha = [str(r.get('PRODUTO','')).lower() for r in registros]
-                    match = get_close_matches(item_busca, produtos_planilha, n=1, cutoff=0.6)
+                    # BUSCA INTELIGENTE: verifica se o que buscou ESTÁ CONTIDO no produto
+                    ocorrencias = []
+                    for r in registros:
+                        nome_prod = str(r.get('produto','') or r.get('PRODUTO','') or '').lower()
+                        if item_busca in nome_prod:
+                            ocorrencias.append(r)
 
-                    if match:
-                        nome_match = match[0]
-                        ocorrencias = [r for r in registros if str(r.get('PRODUTO','')).lower() == nome_match]
-                        try:
-                            mais_barato = min(ocorrencias, key=lambda x: float(str(x.get('PREÇO', 999)).replace('R$','').replace(',','.').strip()))
-                            resposta += f"*{item_busca.upper()}* -> R$ {mais_barato.get('PREÇO')} no {mais_barato.get('MERCADO')} ({mais_barato.get('PRODUTO')})\n"
-                        except:
-                            resposta += f"*{item_busca.upper()}* -> achei mas preço com erro\n"
+                    if ocorrencias:
+                        mais_barato = min(ocorrencias, key=lambda x: pega_valor_real(x.get('preço') or x.get('PREÇO') or x.get('preco') or 0))
+                        preco = mais_barato.get('preço') or mais_barato.get('PREÇO') or mais_barato.get('preco')
+                        mercado = mais_barato.get('mercado') or mais_barato.get('MERCADO')
+                        prod = mais_barato.get('produto') or mais_barato.get('PRODUTO')
+                        resposta += f"*{item_busca.upper()}* -> {preco} no {mercado} ({prod})\n"
                     else:
                         resposta += f"*{item_busca.upper()}* -> ainda não tenho preço\n"
+                
                 resp.message(resposta)
 
-        # CASO 2: CUPOM (foto)
+        # CASO 2: FOTO DE CUPOM
         elif media_urls:
             total_itens = 0
             mercados = []
@@ -69,20 +79,18 @@ def whatsapp():
                     model="gemini-3.6-flash",
                     contents=[
                         types.Part.from_bytes(data=img_data, mime_type="image/jpeg"),
-                        'Extraia o mercado e os itens em JSON puro, sem markdown: {"mercado": "NOME DO MERCADO", "itens": [{"produto": "NOME PRODUTO", "preco": 12.50}]} Use ponto no preço.'
+                        'Extraia o mercado e os itens em JSON puro, sem markdown: {"mercado": "NOME", "itens": [{"produto": "NOME PRODUTO", "preco": 12.50}]} Use ponto no preço.'
                     ]
                 )
                 texto = response.text.replace("```json","").replace("```","").strip()
                 dados = json.loads(texto)
                 for item in dados.get("itens", []):
-                    sheet.append_row([item['produto'], item['preco'], dados.get("mercado",""), datetime.now().strftime("%d/%m/%Y")])
+                    sheet.append_row([item['produto'], f"R$ {item['preco']}".replace('.',','), dados.get("mercado",""), datetime.now().strftime("%d/%m/%Y")])
                     total_itens += 1
                 mercados.append(dados.get("mercado",""))
-
-            resp.message(f"✅ Sucesso! Salvei {total_itens} produtos de {len(media_urls)} foto(s) - {', '.join(set(mercados))}")
-
+            resp.message(f"✅ Sucesso! Salvei {total_itens} produtos - {', '.join(set(mercados))}")
         else:
-            resp.message("Olá! 👋\n\n1️⃣ Mande FOTO do cupom pra salvar\n2️⃣ Mande LISTA tipo: arroz, feijão, leite pra saber onde é mais barato")
+            resp.message("Olá! 👋\n1️⃣ Mande FOTO do cupom\n2️⃣ Mande LISTA: sal, banana, ovo")
 
     except Exception as e:
         print(f"ERRO: {e}")
