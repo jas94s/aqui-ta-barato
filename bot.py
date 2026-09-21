@@ -15,7 +15,7 @@ GOOGLE_CREDS_JSON = os.environ.get("GOOGLE_CREDS_JSON")
 SHEET_ID = os.environ.get("SHEET_ID")
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('models/gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 # Conecta na planilha
 creds_dict = json.loads(GOOGLE_CREDS_JSON)
