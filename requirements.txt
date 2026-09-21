@@ -2,7 +2,7 @@ Flask
 twilio
 gspread
 oauth2client
-google-generativeai
+google-genai
 requests
 streamlit
 gunicorn
